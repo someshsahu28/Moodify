@@ -6,7 +6,7 @@ const cors = require("cors")
 app.use(express.json())
 app.use(cookieParser())
 app.use(cors({
-    origin: ["http://localhost:5173","https://moodify-iota-gray.vercel.app/"],
+    origin: ["http://localhost:5173","https://moodify-iota-gray.vercel.app"],
     credentials: true
 }))
 
