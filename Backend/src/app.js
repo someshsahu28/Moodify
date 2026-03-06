@@ -10,6 +10,9 @@ app.use(cors({
     credentials: true
 }))
 
+app.get("/", (req, res) => {
+  res.send("Moodify API is running 🚀");
+});
 
 const authRoutes = require("./routes/auth.routes")
 const songRoutes = require("./routes/song.routes")
