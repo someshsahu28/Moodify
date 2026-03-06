@@ -4,118 +4,152 @@ const redis = require("../config/cache")
 const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
 
+// helper cookie options
+const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    maxAge: 3 * 24 * 60 * 60 * 1000
+}
+
 async function registerUser(req, res) {
-    const { username, email, password } = req.body;
 
-    const isAlreadyRegistered = await userModel.findOne({
-        $or: [
-            { email },
-            { username }
-        ]
-    })
+    try {
 
-    if (isAlreadyRegistered) {
-        return res.status(400).json({
-            message: "User with the same email or username already exists"
+        const { username, email, password } = req.body;
+
+        const isAlreadyRegistered = await userModel.findOne({
+            $or: [{ email }, { username }]
         })
-    }
 
-    const hash = await bcrypt.hash(password, 10);
-
-    const user = await userModel.create({
-        username,
-        email,
-        password: hash
-    })
-
-    const token = jwt.sign(
-        {
-            id: user._id,
-            username: user.username
-        },
-        process.env.JWT_SECRET,
-        {
-            expiresIn: "3d"
+        if (isAlreadyRegistered) {
+            return res.status(400).json({
+                message: "User with the same email or username already exists"
+            })
         }
-    )
 
-    res.cookie("token", token)
+        const hash = await bcrypt.hash(password, 10)
 
-    return res.status(201).json({
-        message: "User registered successfully",
-        user: {
-            id: user._id,
-            username: user.username,
-            email: user.email
-        }
-    })
-
-}
-
-async function loginUser(req,res){
-    const {email,password,username} = req.body;
-
-    const user = await userModel.findOne({
-        $or: [
-            {email},
-            {password}
-        ]
-    }).select("+password")
-
-    if(!user){
-        return res.status(400).json({
-            message:"Invalid credentials"
+        const user = await userModel.create({
+            username,
+            email,
+            password: hash
         })
-    }
 
-    const isPasswordValid = await bcrypt.compare(password,user.password);
+        const token = jwt.sign(
+            {
+                id: user._id,
+                username: user.username
+            },
+            process.env.JWT_SECRET,
+            { expiresIn: "3d" }
+        )
 
-    if(!isPasswordValid){
-        return res.status(400).json({
-            message : "Invalid credentials"
+        res.cookie("token", token, cookieOptions)
+
+        return res.status(201).json({
+            message: "User registered successfully",
+            user: {
+                id: user._id,
+                username: user.username,
+                email: user.email
+            }
         })
+
+    } catch (error) {
+        res.status(500).json({ message: error.message })
     }
-    const token = jwt.sign(
-        {
-            id: user._id,
-            username: user.username
-        },
-        process.env.JWT_SECRET,
-        {
-            expiresIn: "3d"
+}
+
+async function loginUser(req, res) {
+
+    try {
+
+        const { email, username, password } = req.body;
+
+        const user = await userModel.findOne({
+            $or: [{ email }, { username }]
+        }).select("+password")
+
+        if (!user) {
+            return res.status(400).json({
+                message: "Invalid credentials"
+            })
         }
-    )
-    res.cookie("token",token)
 
-    return res.status(200).json({
-        message:"User logged in successfully",
-        user:{
-            id: user._id,
-            username:user.username,
-            email:user.email
+        const isPasswordValid = await bcrypt.compare(password, user.password)
+
+        if (!isPasswordValid) {
+            return res.status(400).json({
+                message: "Invalid credentials"
+            })
         }
-    })
+
+        const token = jwt.sign(
+            {
+                id: user._id,
+                username: user.username
+            },
+            process.env.JWT_SECRET,
+            { expiresIn: "3d" }
+        )
+
+        res.cookie("token", token, cookieOptions)
+
+        return res.status(200).json({
+            message: "User logged in successfully",
+            user: {
+                id: user._id,
+                username: user.username,
+                email: user.email
+            }
+        })
+
+    } catch (error) {
+        res.status(500).json({ message: error.message })
+    }
 }
 
-async function getMe(req,res){
-    const user = await userModel.findById(req.user.id)
+async function getMe(req, res) {
 
-    res.status(200).json({
-        message: "User fetched successfully",
-        user
-    })
+    try {
+
+        const user = await userModel.findById(req.user.id)
+
+        res.status(200).json({
+            message: "User fetched successfully",
+            user
+        })
+
+    } catch (error) {
+        res.status(500).json({ message: error.message })
+    }
 }
 
-async function logoutUser(req,res){
-    const token = req.cookies.token
+async function logoutUser(req, res) {
 
-    res.clearCookie("token")
+    try {
 
-    await redis.set(token,Date.now().toString(),"EX",60*60)
+        const token = req.cookies.token
 
-    res.status(200).json({
-        message:"logout successfully"
-    })
+        res.clearCookie("token", cookieOptions)
+
+        if (token) {
+            await redis.set(token, Date.now().toString(), "EX", 60 * 60)
+        }
+
+        res.status(200).json({
+            message: "Logout successfully"
+        })
+
+    } catch (error) {
+        res.status(500).json({ message: error.message })
+    }
 }
 
-module.exports = {registerUser,loginUser, getMe,logoutUser}
+module.exports = {
+    registerUser,
+    loginUser,
+    getMe,
+    logoutUser
+}
